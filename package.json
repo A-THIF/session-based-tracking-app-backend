@@ -1,0 +1,32 @@
+{
+  "name": "session-based-tracking-app-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/A-THIF/session-based-tracking-app-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/A-THIF/session-based-tracking-app-backend/issues"
+  },
+  "homepage": "https://github.com/A-THIF/session-based-tracking-app-backend#readme",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "ably": "^2.21.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.1",
+    "express": "^5.2.1",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
