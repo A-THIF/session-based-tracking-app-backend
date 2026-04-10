@@ -11,5 +11,8 @@ app.use(express.json());
 // Routes
 app.use('/session', sessionRoutes);
 app.use('/auth', authRoutes); // Link your auth routes here
+app.get('/', (req, res) => {
+  res.send('Server is up and running! 🚀');
+});
 
 export default app;
