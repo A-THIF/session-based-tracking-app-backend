@@ -1,7 +1,8 @@
 import { neon } from "@neondatabase/serverless";
 
-// ✅ Create DB client (single instance)
-// ✅ Initialize DB (create tables safely)
+// ✅ This line is likely missing or named differently!
+export const sql = neon(process.env.DATABASE_URL);
+
 export const initDb = async () => {
   try {
     if (!process.env.DATABASE_URL) {
