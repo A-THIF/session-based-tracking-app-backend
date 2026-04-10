@@ -1,6 +1,5 @@
 import express from 'express';
-import { createSession, joinSession } from '../controllers/sessionController.js';
-
+import { createSession, joinSession, getSessionDetails } from '../controllers/sessionController.js';
 const router = express.Router();
 
 router.post('/create', createSession);
