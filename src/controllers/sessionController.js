@@ -3,13 +3,17 @@ import { sql } from '../db/db.js';
 
 // ✅ Ensure "export" is present here
 export const createSession = async (req, res) => {
-  const { duration = 60 } = req.body; // Default to 60 mins if not sent
+  const duration = req.body?.duration || 60;
   const code = crypto.randomBytes(3).toString('hex').toUpperCase();
-  
+
   try {
     const result = await sql`
       INSERT INTO sessions (code, duration_minutes, expires_at) 
-      VALUES (${code}, ${duration}, NOW() + ${duration + ' minutes'}::interval) 
+      VALUES (
+        ${code}, 
+        ${duration}, 
+        NOW() + (${duration} * INTERVAL '1 minute')
+      ) 
       RETURNING code, expires_at
     `;
 
@@ -17,7 +21,9 @@ export const createSession = async (req, res) => {
       sessionCode: result[0].code,
       expiresAt: result[0].expires_at 
     });
+
   } catch (err) {
+    console.error("DB ERROR:", err);  // 🔥 ADD THIS
     res.status(500).json({ error: "Creation failed" });
   }
 };
