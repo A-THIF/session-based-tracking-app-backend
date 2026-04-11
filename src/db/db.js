@@ -14,14 +14,14 @@ export const initDb = async () => {
     // 1. Create Sessions Table
     await sql`
       CREATE TABLE IF NOT EXISTS sessions (
-        id SERIAL PRIMARY KEY,
-        code VARCHAR(6) UNIQUE NOT NULL,
-        host_id VARCHAR(50),
-        duration_minutes INTEGER DEFAULT 60,
-        expires_at TIMESTAMPTZ NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        is_active BOOLEAN DEFAULT TRUE
-      );
+  id SERIAL PRIMARY KEY,
+  code VARCHAR(6) UNIQUE NOT NULL,
+  host_id VARCHAR(50),
+  duration_minutes INTEGER DEFAULT 60,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  is_active BOOLEAN DEFAULT TRUE
+);
     `;
 
     // 2. Create Participants Table
