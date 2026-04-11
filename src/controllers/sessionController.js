@@ -77,3 +77,26 @@ export const getSessionDetails = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch history" });
   }
 };
+
+export const handleAblyWebhook = async (req, res) => {
+  // Ably Webhooks send an array of messages
+  const items = req.body.items || []; 
+  
+  try {
+    for (const item of items) {
+      const { data } = item.message; // This is the {lat, lng, deviceId} sent from Flutter
+      const channelName = item.channel;
+      const sessionCode = channelName.replace('session_', ''); // Extract '93793D'
+
+      await sql`
+        INSERT INTO location_history (session_code, device_id, latitude, longitude)
+        VALUES (${sessionCode}, ${data.deviceId}, ${data.lat}, ${data.lng})
+      `;
+    }
+    // Always return 200 to Ably so it doesn't try to re-send
+    res.status(200).send("OK");
+  } catch (err) {
+    console.error("❌ Webhook Database Error:", err);
+    res.status(500).send("Error");
+  }
+};
