@@ -7,15 +7,15 @@ export const createSession = async (req, res) => {
   const code = crypto.randomBytes(3).toString('hex').toUpperCase();
 
   try {
+    console.log(`🚀 Attempting to create session: ${code}`);
+    
     const result = await sql`
       INSERT INTO sessions (code, duration_minutes, expires_at) 
-      VALUES (
-        ${code}, 
-        ${duration}, 
-        NOW() + (${duration} * INTERVAL '1 minute')
-      ) 
+      VALUES (${code}, ${duration}, NOW() + (${duration} * INTERVAL '1 minute')) 
       RETURNING code, expires_at
     `;
+
+    console.log("✅ DB Success:", result[0]);
 
     res.status(201).json({ 
       sessionCode: result[0].code,
@@ -23,8 +23,8 @@ export const createSession = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("DB ERROR:", err);  // 🔥 ADD THIS
-    res.status(500).json({ error: "Creation failed" });
+    console.error("❌ DB FATAL ERROR:", err.message); // This will tell us if it's a login/password issue
+    res.status(500).json({ error: "Internal Server Error", details: err.message });
   }
 };
 // ✅ Add this export too for the "Join" feature later
