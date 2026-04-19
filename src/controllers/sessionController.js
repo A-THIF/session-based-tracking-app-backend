@@ -8,7 +8,6 @@ export const createSession = async (req, res) => {
 
   try {
     console.log(`🚀 Attempting to create session: ${code}`);
-    ī
     const result = await sql`
       INSERT INTO sessions (code, duration_minutes, expires_at) 
       VALUES (${code}, ${duration}, NOW() + (${duration} * INTERVAL '1 minute')) 
