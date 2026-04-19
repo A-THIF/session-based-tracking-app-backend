@@ -34,6 +34,11 @@ export const initDb = async () => {
       );
     `;
 
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS participants_session_code_device_id_key
+      ON participants (session_code, device_id);
+    `;
+
     // 3. Create Location History Table
     await sql`
       CREATE TABLE IF NOT EXISTS location_history (

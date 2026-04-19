@@ -27,9 +27,10 @@ export const createSession = async (req, res) => {
   }
 };
 // ✅ Add this export too for the "Join" feature later
-export const joinSession = async (req, res) => {
-  const { code } = req.body;
+export const joinSession = async (req, res, next) => {
+  const { code, deviceId } = req.body;
   try {
+    // 1. Verify session exists
     const session = await sql`
       SELECT * FROM sessions 
       WHERE code = ${code.toUpperCase()} 
@@ -38,11 +39,22 @@ export const joinSession = async (req, res) => {
     `;
 
     if (session.length === 0) {
-      return res.status(404).json({ error: "Invalid or expired session code" });
+      return res.status(404).json({ success: false, message: "Invalid session" });
     }
-    res.json({ message: "Session joined successfully", session: session[0] });
+
+    // 2. Insert into participants so the session has membership data.
+    await sql`
+      INSERT INTO participants (session_code, device_id, joined_at)
+      VALUES (${code.toUpperCase()}, ${deviceId}, NOW())
+      ON CONFLICT (session_code, device_id) DO NOTHING
+    `;
+
+    res.status(200).json({
+      success: true,
+      session: { code: session[0].code, id: session[0].id }
+    });
   } catch (err) {
-    res.status(500).json({ error: "Verification failed" });
+    next(err);
   }
 };
 
