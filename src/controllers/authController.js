@@ -11,7 +11,7 @@ export const generateToken = async (req, res) => {
     const tokenDetails = await realtime.auth.requestToken({
       clientId,
       capability: {
-        [`session_${sessionCode}`]: ["publish", "subscribe", "presence"],
+        [`session_${sessionCode}`]: ["publish", "subscribe", "presence", "history"],
       },
     });
 
