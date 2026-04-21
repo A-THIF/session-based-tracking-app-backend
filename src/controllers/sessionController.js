@@ -90,37 +90,39 @@ export const getSessionDetails = async (req, res) => {
 };
 
 export const handleAblyWebhook = async (req, res) => {
-  // Ably Webhooks send an array of messages
+  // 1. Fixed typo: "utems.lrngth" -> "items.length"
   const items = req.body.messages || req.body.items || [];
 
-  if (utems.lrngth === 0){
-    return res.status(200).json({ status: "skippped", message: "No messages in payload" });
+  if (items.length === 0) {
+    return res.status(200).json({ status: "skipped", message: "No messages in payload" });
   }
   
-  console.log('Ably Webhook Triggered: Received ${items.length} items');
+  // 2. Fixed template literal: Use backticks `` instead of single quotes '' to see the length
+  console.log(`Ably Webhook Triggered: Received ${items.length} items`);
   
   try {
     for (const item of items) {
-      const messageData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data // This is the {lat, lng, deviceId} sent from Flutter
+      const messageData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
       
       const channelName = item.channel;
       const sessionCode = channelName.replace('session_', '');
 
-      if(!messageData..lat || !messageData.lng || !messageData.deviceId){
+      // 3. FIXED SYNTAX ERROR: Removed double dot "messageData..lat"
+      if (!messageData.lat || !messageData.lng || !messageData.deviceId) {
         console.warn("⚠️ Skipping malformed message item:", item.id);
         continue;
       }
 
-      console.log(' Webhook: logging pos for ${sessionCode} (Device: {messageData.deviceId})');
-      
-      
+      // 4. Fixed template literal and variable name in console.log
+      console.log(`📍 Webhook: logging pos for ${sessionCode} (Device: ${messageData.deviceId})`);
 
+      // 5. FIXED UNDEFINED VARIABLE: Changed "data" back to "messageData"
       await sql`
         INSERT INTO location_history (session_code, device_id, latitude, longitude)
-        VALUES (${sessionCode}, ${data.deviceId}, ${data.lat}, ${data.lng})
+        VALUES (${sessionCode}, ${messageData.deviceId}, ${messageData.lat}, ${messageData.lng})
       `;
     }
-    // Always return 200 to Ably so it doesn't try to re-send
+    
     res.status(200).json({ success: true, processed: items.length });
   } catch (err) {
     console.error("❌ Webhook Protocol Error:", err.message);
