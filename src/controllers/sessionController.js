@@ -90,37 +90,44 @@ export const getSessionDetails = async (req, res) => {
 };
 
 export const handleAblyWebhook = async (req, res) => {
-  // Ably Enveloped webhooks put messages in req.body.messages
+  // Ably "Enveloped" webhooks put the messages in req.body.messages
   const items = req.body.messages || req.body.items || []; 
   console.log(`Ably Webhook Triggered: Received ${items.length} items`);
   
   try {
     for (const item of items) {
-      // 1. PROTOCOL FIX: Use channelId for enveloped messages
-      const channelName = item.channelId || item.channel || "";
-      if (!channelName.includes('session_')) {
-         console.log("⚠️ Skipping non-session channel:", channelName);
+      // 1. FIX: Comprehensive check for channel name
+      // Enveloped messages usually have it at the root of the item
+      const channelName = item.channel || item.channelId || "";
+      
+      console.log(`Debug: Received message from channel: "${channelName}"`);
+
+      if (!channelName || !channelName.includes('session_')) {
+         console.log("⚠️ Skipping invalid or empty channel:", channelName);
          continue;
       }
       
       const sessionCode = channelName.replace('session_', '').toUpperCase();
 
-      // 2. SAFE PARSING (Keep this from previous step)
+      // 2. SAFE PARSING
       let messageData;
       try {
         messageData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
       } catch (e) {
-        console.log("⚠️ Skipping non-JSON/Test message");
         continue; 
       }
 
       // 3. VALIDATION & INSERT
+      // Note: In some Ably envelopes, the data is inside item.message.data 
+      // but usually it's just item.data
       if (messageData && messageData.deviceId && messageData.lat) {
         await sql`
           INSERT INTO location_history (session_code, device_id, latitude, longitude)
           VALUES (${sessionCode}, ${messageData.deviceId}, ${messageData.lat}, ${messageData.lng})
         `;
         console.log(`✅ DB Update: Session ${sessionCode} - Device ${messageData.deviceId}`);
+      } else {
+        console.log("⚠️ Message parsed but missing required fields (lat/deviceId)");
       }
     }
     
