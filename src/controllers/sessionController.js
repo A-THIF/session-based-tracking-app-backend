@@ -90,42 +90,43 @@ export const getSessionDetails = async (req, res) => {
 };
 
 export const handleAblyWebhook = async (req, res) => {
+  // Ably Enveloped webhooks put messages in req.body.messages
   const items = req.body.messages || req.body.items || []; 
   console.log(`Ably Webhook Triggered: Received ${items.length} items`);
   
   try {
     for (const item of items) {
-      // 1. SAFE PARSING
+      // 1. PROTOCOL FIX: Use channelId for enveloped messages
+      const channelName = item.channelId || item.channel || "";
+      if (!channelName.includes('session_')) {
+         console.log("⚠️ Skipping non-session channel:", channelName);
+         continue;
+      }
+      
+      const sessionCode = channelName.replace('session_', '').toUpperCase();
+
+      // 2. SAFE PARSING (Keep this from previous step)
       let messageData;
       try {
         messageData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
       } catch (e) {
-        console.log("⚠️ Skipping non-JSON test message:", item.data);
-        continue; // Skip the Ably "This message is a test" string
+        console.log("⚠️ Skipping non-JSON/Test message");
+        continue; 
       }
 
-      // 2. VALIDATION
-      if (!messageData || !messageData.deviceId) {
-        console.warn("⚠️ Skipping message: Missing deviceId or content");
-        continue;
+      // 3. VALIDATION & INSERT
+      if (messageData && messageData.deviceId && messageData.lat) {
+        await sql`
+          INSERT INTO location_history (session_code, device_id, latitude, longitude)
+          VALUES (${sessionCode}, ${messageData.deviceId}, ${messageData.lat}, ${messageData.lng})
+        `;
+        console.log(`✅ DB Update: Session ${sessionCode} - Device ${messageData.deviceId}`);
       }
-      
-      const channelName = item.channel;
-      const sessionCode = channelName.replace('session_', '').toUpperCase();
-
-      // 3. DATABASE INSERT (Using messageData, not data)
-      await sql`
-        INSERT INTO location_history (session_code, device_id, latitude, longitude)
-        VALUES (${sessionCode}, ${messageData.deviceId}, ${messageData.lat}, ${messageData.lng})
-      `;
-      
-      console.log(`✅ Logged path for ${sessionCode}`);
     }
     
     res.status(200).json({ success: true });
   } catch (err) {
     console.error("❌ Webhook Protocol Error:", err.message);
-    // Return 200 so Ably thinks everything is fine, but check your Render logs!
     res.status(200).json({ success: false, error: err.message });
   }
 };
