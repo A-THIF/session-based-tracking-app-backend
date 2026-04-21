@@ -90,47 +90,51 @@ export const getSessionDetails = async (req, res) => {
 };
 
 export const handleAblyWebhook = async (req, res) => {
-  // 1. Get the messages from the Ably Envelope
+  // 1. Ably Envelopes put everything inside messages array OR items array
   const items = req.body.messages || req.body.items || []; 
   console.log(`Ably Webhook Triggered: Received ${items.length} items`);
   
   try {
     for (const item of items) {
-      // 2. ENVELOPE PROTOCOL FIX
-      // In "Enveloped" mode, Ably puts metadata in 'item' but the 
-      // actual publish info is often inside 'item.message'
-      const channelName = item.channelId || item.channel || (item.message ? item.message.channel : "");
+      // 2. PROTOCOL FIX: In Enveloped Webhooks, the channel is at the item root
+      // but sometimes called channelId or just channel.
+      const channelName = item.channel || item.channelId || "";
       
+      console.log(`Debug: Raw Item Keys: ${Object.keys(item)}`); // This will tell us exactly what Ably sent
       console.log(`Debug: Identified channel as: "${channelName}"`);
 
       if (!channelName || !channelName.includes('session_')) {
-         console.log("⚠️ Skipping: Channel name missing from envelope structure");
+         console.log("⚠️ Skipping: Channel name missing or invalid:", channelName);
          continue;
       }
       
       const sessionCode = channelName.replace('session_', '').toUpperCase();
 
-      // 3. DATA EXTRACTION FIX
-      // Depending on the version, data is either item.data or item.message.data
-      let rawData = item.data || (item.message ? item.message.data : null);
+      // 3. DATA EXTRACTION FIX: Enveloped data is usually in item.data
+      let messageData = item.data;
       
-      let messageData;
-      try {
-        messageData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-      } catch (e) {
-        console.log("⚠️ Skipping: Data is not valid JSON");
-        continue; 
+      // If it's a string, parse it
+      if (typeof messageData === 'string') {
+        try {
+          messageData = JSON.parse(messageData);
+        } catch (e) {
+          console.log("⚠️ Skipping: Data is not JSON string");
+          continue;
+        }
       }
 
       // 4. VALIDATION & INSERT
-      if (messageData && messageData.deviceId && messageData.lat) {
+      if (messageData && messageData.deviceId && (messageData.lat || messageData.latitude)) {
+        const lat = messageData.lat || messageData.latitude;
+        const lng = messageData.lng || messageData.longitude;
+
         await sql`
           INSERT INTO location_history (session_code, device_id, latitude, longitude)
-          VALUES (${sessionCode}, ${messageData.deviceId}, ${messageData.lat}, ${messageData.lng})
+          VALUES (${sessionCode}, ${messageData.deviceId}, ${lat}, ${lng})
         `;
-        console.log(`✅ DB Success: Session ${sessionCode} updated via Enveloped Webhook`);
+        console.log(`✅ DB Success: Session ${sessionCode} updated`);
       } else {
-        console.log("⚠️ Payload structure mismatch:", JSON.stringify(messageData));
+        console.log("⚠️ Payload mismatch or test message. Data:", JSON.stringify(messageData));
       }
     }
     
