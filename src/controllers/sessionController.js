@@ -90,44 +90,47 @@ export const getSessionDetails = async (req, res) => {
 };
 
 export const handleAblyWebhook = async (req, res) => {
-  // Ably "Enveloped" webhooks put the messages in req.body.messages
+  // 1. Get the messages from the Ably Envelope
   const items = req.body.messages || req.body.items || []; 
   console.log(`Ably Webhook Triggered: Received ${items.length} items`);
   
   try {
     for (const item of items) {
-      // 1. FIX: Comprehensive check for channel name
-      // Enveloped messages usually have it at the root of the item
-      const channelName = item.channel || item.channelId || "";
+      // 2. ENVELOPE PROTOCOL FIX
+      // In "Enveloped" mode, Ably puts metadata in 'item' but the 
+      // actual publish info is often inside 'item.message'
+      const channelName = item.channelId || item.channel || (item.message ? item.message.channel : "");
       
-      console.log(`Debug: Received message from channel: "${channelName}"`);
+      console.log(`Debug: Identified channel as: "${channelName}"`);
 
       if (!channelName || !channelName.includes('session_')) {
-         console.log("⚠️ Skipping invalid or empty channel:", channelName);
+         console.log("⚠️ Skipping: Channel name missing from envelope structure");
          continue;
       }
       
       const sessionCode = channelName.replace('session_', '').toUpperCase();
 
-      // 2. SAFE PARSING
+      // 3. DATA EXTRACTION FIX
+      // Depending on the version, data is either item.data or item.message.data
+      let rawData = item.data || (item.message ? item.message.data : null);
+      
       let messageData;
       try {
-        messageData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
+        messageData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
       } catch (e) {
+        console.log("⚠️ Skipping: Data is not valid JSON");
         continue; 
       }
 
-      // 3. VALIDATION & INSERT
-      // Note: In some Ably envelopes, the data is inside item.message.data 
-      // but usually it's just item.data
+      // 4. VALIDATION & INSERT
       if (messageData && messageData.deviceId && messageData.lat) {
         await sql`
           INSERT INTO location_history (session_code, device_id, latitude, longitude)
           VALUES (${sessionCode}, ${messageData.deviceId}, ${messageData.lat}, ${messageData.lng})
         `;
-        console.log(`✅ DB Update: Session ${sessionCode} - Device ${messageData.deviceId}`);
+        console.log(`✅ DB Success: Session ${sessionCode} updated via Enveloped Webhook`);
       } else {
-        console.log("⚠️ Message parsed but missing required fields (lat/deviceId)");
+        console.log("⚠️ Payload structure mismatch:", JSON.stringify(messageData));
       }
     }
     
