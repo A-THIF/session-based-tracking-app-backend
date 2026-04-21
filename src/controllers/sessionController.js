@@ -90,46 +90,42 @@ export const getSessionDetails = async (req, res) => {
 };
 
 export const handleAblyWebhook = async (req, res) => {
-  // 1. Fixed typo: "utems.lrngth" -> "items.length"
-  const items = req.body.messages || req.body.items || [];
-
-  if (items.length === 0) {
-    return res.status(200).json({ status: "skipped", message: "No messages in payload" });
-  }
-  
-  // 2. Fixed template literal: Use backticks `` instead of single quotes '' to see the length
+  const items = req.body.messages || req.body.items || []; 
   console.log(`Ably Webhook Triggered: Received ${items.length} items`);
   
   try {
     for (const item of items) {
-      const messageData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
-      
-      const channelName = item.channel;
-      const sessionCode = channelName.replace('session_', '');
-
-      // 3. FIXED SYNTAX ERROR: Removed double dot "messageData..lat"
-      if (!messageData.lat || !messageData.lng || !messageData.deviceId) {
-        console.warn("⚠️ Skipping malformed message item:", item.id);
-        continue;
+      // 1. SAFE PARSING
+      let messageData;
+      try {
+        messageData = typeof item.data === 'string' ? JSON.parse(item.data) : item.data;
+      } catch (e) {
+        console.log("⚠️ Skipping non-JSON test message:", item.data);
+        continue; // Skip the Ably "This message is a test" string
       }
 
-      // 4. Fixed template literal and variable name in console.log
-      console.log(`📍 Webhook: logging pos for ${sessionCode} (Device: ${messageData.deviceId})`);
+      // 2. VALIDATION
+      if (!messageData || !messageData.deviceId) {
+        console.warn("⚠️ Skipping message: Missing deviceId or content");
+        continue;
+      }
+      
+      const channelName = item.channel;
+      const sessionCode = channelName.replace('session_', '').toUpperCase();
 
-      // 5. FIXED UNDEFINED VARIABLE: Changed "data" back to "messageData"
+      // 3. DATABASE INSERT (Using messageData, not data)
       await sql`
         INSERT INTO location_history (session_code, device_id, latitude, longitude)
         VALUES (${sessionCode}, ${messageData.deviceId}, ${messageData.lat}, ${messageData.lng})
       `;
+      
+      console.log(`✅ Logged path for ${sessionCode}`);
     }
     
-    res.status(200).json({ success: true, processed: items.length });
+    res.status(200).json({ success: true });
   } catch (err) {
     console.error("❌ Webhook Protocol Error:", err.message);
-    res.status(200).json({
-      success: false,
-      message: "Webhook processed with errors",
-      error: err.message
-    });
+    // Return 200 so Ably thinks everything is fine, but check your Render logs!
+    res.status(200).json({ success: false, error: err.message });
   }
 };
