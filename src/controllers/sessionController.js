@@ -58,6 +58,31 @@ export const joinSession = async (req, res, next) => {
   }
 };
 
+
+// src/controllers/sessionController.js
+
+// Add this at the bottom of your file
+export const logAuditError = async (req, res) => {
+  const { event, session, message, device, timestamp } = req.body;
+
+  // This log will appear in your Render "Logs" dashboard.
+  // We use console.error or console.warn to make it stand out from regular logs.
+  console.warn(`
+    [REMOTE_AUDIT] ----------------------------
+    EVENT:     ${event}
+    SESSION:   ${session || 'N/A'}
+    DEVICE:    ${device || 'Unknown'}
+    TIME:      ${timestamp}
+    MESSAGE:   ${message}
+    -------------------------------------------
+  `);
+
+  // Optionally: You could also save these to a 'logs' table in Neon DB 
+  // if you want to analyze them later. For now, console is enough.
+
+  res.status(200).json({ success: true });
+};
+
 export const getSessionDetails = async (req, res) => {
   const { code } = req.params;
 
