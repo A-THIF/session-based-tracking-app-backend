@@ -117,13 +117,14 @@ export const getSessionDetails = async (req, res) => {
 export const handleAblyWebhook = async (req, res) => {
   // 1. Ably Envelopes put everything inside messages array OR items array
   const items = req.body.messages || req.body.items || []; 
+  console.log("FULL WEBHOOK BODY:", JSON.stringify(req.body, null, 2));
   console.log(`Ably Webhook Triggered: Received ${items.length} items`);
   
   try {
     for (const item of items) {
       // 2. PROTOCOL FIX: In Enveloped Webhooks, the channel is at the item root
       // but sometimes called channelId or just channel.
-      const channelName = item.channel || item.channelId || "";
+      const channelName = item.channel || item.channelId || headerChannel || "";
       
       console.log(`Debug: Raw Item Keys: ${Object.keys(item)}`); // This will tell us exactly what Ably sent
       console.log(`Debug: Identified channel as: "${channelName}"`);
