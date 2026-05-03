@@ -1,56 +1,71 @@
 import axios from 'axios';
 import polyline from '@mapbox/polyline';
 
-// Read keys from Render Environment Variables
+// Render Environment Variables
 const STADIA_KEY = process.env.STADIA_API_KEY;
 const ORS_KEY = process.env.ORS_API_KEY;
 
 /**
  * Waterfall Routing Logic
- * 1. Stadia Maps (Valhalla) -> 6-digit precision
- * 2. OpenRouteService (Backup) -> GeoJSON coordinates
+ * 1. Stadia Maps
+ * 2. OpenRouteService
+ * 3. Straight-line fallback
  */
 export const getRoutePath = async (req, res) => {
   const { startLat, startLng, endLat, endLng } = req.query;
 
   if (!startLat || !startLng || !endLat || !endLng) {
-    return res.status(400).json({ error: "Missing start or end coordinates" });
+    return res.status(400).json({
+      error: "Missing start or end coordinates"
+    });
   }
 
   try {
-    // --- STEP 1: TRY STADIA MAPS (Primary) ---
-    console.log("🛣️ Attempting Stadia Routing...");
+    // ───────────── STADIA (PRIMARY) ─────────────
     const stadiaUrl = `https://api.stadiamaps.com/route/v1?api_key=${STADIA_KEY}`;
-    
+
     const stadiaResponse = await axios.post(stadiaUrl, {
       locations: [
-        { lat: parseFloat(startLat), lon: parseFloat(startLng) },
-        { lat: parseFloat(endLat), lon: parseFloat(endLng) }
+        {
+          lat: parseFloat(startLat),
+          lon: parseFloat(startLng)
+        },
+        {
+          lat: parseFloat(endLat),
+          lon: parseFloat(endLng)
+        }
       ],
       costing: "auto",
       units: "meters"
     });
 
-    const shape = stadiaResponse.data.trip.legs[0].shape;
-    
-    // Stadia uses precision 6. Mapbox polyline decodes to [lat, lng]
-    const decoded = polyline.decode(shape, 6);
-    
-    const points = decoded.map(p => ({
+    const trip = stadiaResponse.data.trip;
+    const leg = trip.legs[0];
+    const summary = trip.summary;
+
+    const decoded = polyline.decode(leg.shape, 6);
+
+    const points = decoded.map((p) => ({
       latitude: p[0],
       longitude: p[1]
     }));
 
-    return res.json({ provider: "stadia", points });
+    return res.json({
+      provider: "stadia",
+      points,
+      distanceMeters: summary.length,
+      durationSeconds: summary.time
+    });
 
-  } catch (error) {
-    console.error("⚠️ Stadia Routing Failed, falling back to ORS...");
+  } catch (stadiaError) {
+    console.error("⚠️ Stadia failed:", stadiaError.message);
+    console.log("Trying ORS fallback...");
 
     try {
-      // --- STEP 2: TRY OPENROUTE SERVICE (Backup) ---
-      // Note: ORS uses [lng, lat] format for the URL
-      const orsUrl = `https://api.openrouteservice.org/v2/directions/driving-car`;
-      
+      // ───────────── ORS (BACKUP) ─────────────
+      const orsUrl =
+        "https://api.openrouteservice.org/v2/directions/driving-car";
+
       const orsResponse = await axios.get(orsUrl, {
         params: {
           api_key: ORS_KEY,
@@ -59,26 +74,39 @@ export const getRoutePath = async (req, res) => {
         }
       });
 
-      // ORS returns GeoJSON coordinates: [lng, lat]
-      const coords = orsResponse.data.features[0].geometry.coordinates;
-      
-      const points = coords.map(c => ({
+      const feature = orsResponse.data.features[0];
+      const summary = feature.properties.summary;
+
+      const points = feature.geometry.coordinates.map((c) => ({
         latitude: c[1],
         longitude: c[0]
       }));
 
-      return res.json({ provider: "ors", points });
+      return res.json({
+        provider: "ors",
+        points,
+        distanceMeters: summary.distance,
+        durationSeconds: summary.duration
+      });
 
     } catch (orsError) {
-      console.error("❌ Both Routing Services Failed.");
-      
-      // --- STEP 3: FINAL FALLBACK (Straight Line) ---
-      return res.json({ 
-        provider: "fallback", 
+      console.error("❌ ORS failed:", orsError.message);
+
+      // ───────────── FINAL FALLBACK ─────────────
+      return res.json({
+        provider: "fallback",
         points: [
-          { latitude: parseFloat(startLat), longitude: parseFloat(startLng) },
-          { latitude: parseFloat(endLat), longitude: parseFloat(endLng) }
-        ] 
+          {
+            latitude: parseFloat(startLat),
+            longitude: parseFloat(startLng)
+          },
+          {
+            latitude: parseFloat(endLat),
+            longitude: parseFloat(endLng)
+          }
+        ],
+        distanceMeters: null,
+        durationSeconds: null
       });
     }
   }
