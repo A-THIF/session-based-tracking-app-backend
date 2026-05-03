@@ -114,42 +114,31 @@ export const getSessionDetails = async (req, res) => {
   }
 };
 
+// src/controllers/sessionController.js
+
 export const handleAblyWebhook = async (req, res) => {
-  // 1. Ably Envelopes put everything inside messages array OR items array
   const items = req.body.messages || req.body.items || []; 
-  console.log("FULL WEBHOOK BODY:", JSON.stringify(req.body, null, 2));
-  console.log(`Ably Webhook Triggered: Received ${items.length} items`);
+  // 🟢 FIX: Extract header safely
+  const headerChannel = req.headers['x-ably-channel'] || "";
   
   try {
     for (const item of items) {
-      // 2. PROTOCOL FIX: In Enveloped Webhooks, the channel is at the item root
-      // but sometimes called channelId or just channel.
-      const channelName = item.channel || item.channelId || headerChannel || "";
-      
-      console.log(`Debug: Raw Item Keys: ${Object.keys(item)}`); // This will tell us exactly what Ably sent
-      console.log(`Debug: Identified channel as: "${channelName}"`);
+      // 🟢 FIX: Correctly check for channel name in all possible Ably spots
+      const channelName = item.channel || item.channelId || req.body.channel || headerChannel || "";
 
       if (!channelName || !channelName.includes('session_')) {
-         console.log("⚠️ Skipping: Channel name missing or invalid:", channelName);
          continue;
       }
       
       const sessionCode = channelName.replace('session_', '').toUpperCase();
 
-      // 3. DATA EXTRACTION FIX: Enveloped data is usually in item.data
       let messageData = item.data;
-      
-      // If it's a string, parse it
       if (typeof messageData === 'string') {
         try {
           messageData = JSON.parse(messageData);
-        } catch (e) {
-          console.log("⚠️ Skipping: Data is not JSON string");
-          continue;
-        }
+        } catch (e) { continue; }
       }
 
-      // 4. VALIDATION & INSERT
       if (messageData && messageData.deviceId && (messageData.lat || messageData.latitude)) {
         const lat = messageData.lat || messageData.latitude;
         const lng = messageData.lng || messageData.longitude;
@@ -159,11 +148,8 @@ export const handleAblyWebhook = async (req, res) => {
           VALUES (${sessionCode}, ${messageData.deviceId}, ${lat}, ${lng})
         `;
         console.log(`✅ DB Success: Session ${sessionCode} updated`);
-      } else {
-        console.log("⚠️ Payload mismatch or test message. Data:", JSON.stringify(messageData));
       }
     }
-    
     res.status(200).json({ success: true });
   } catch (err) {
     console.error("❌ Webhook Protocol Error:", err.message);
