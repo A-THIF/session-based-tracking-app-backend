@@ -40,16 +40,18 @@ export const initDb = async () => {
     `;
 
     // 3. Create Location History Table
-    await sql`
-      CREATE TABLE IF NOT EXISTS location_history (
-        id SERIAL PRIMARY KEY,
-        session_code VARCHAR(6) REFERENCES sessions(code),
-        device_id VARCHAR(100),
-        latitude DOUBLE PRECISION NOT NULL,
-        longitude DOUBLE PRECISION NOT NULL,
-        recorded_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `;
+    // 4. Create Users Table for Manual Email Auth
+await sql`
+  CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    display_name VARCHAR(100),
+    profile_type VARCHAR(50) DEFAULT 'genz_1',
+    is_dark_theme BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+`;
 
     console.log("🐘 Database ready");
   } catch (err) {

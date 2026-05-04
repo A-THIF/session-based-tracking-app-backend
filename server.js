@@ -1,27 +1,65 @@
 import 'dotenv/config';
 import rateLimit from 'express-rate-limit';
 import app from './src/app.js';
-import { initDb } from './src/db/db.js';
-// server.js
+import { initDb, sql } from './src/db/db.js';
+import userRoutes from './src/routes/userRoutes.js';
+import authRoutes from './src/routes/authRoutes.js';
+import sessionRoutes from './src/routes/sessionRoutes.js';
 
+app.use('/user', userRoutes);
+app.use('/auth', authRoutes);
+app.use('/session', sessionRoutes);
+
+const PORT = process.env.PORT || 3000;
 
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // Limit each IP to 50 requests per window
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: {
     error: "Too many requests from this IP, please try again after 15 minutes"
   }
 });
 
-// Apply the rate limiter to all session and auth routes
 app.use('/session', limiter);
 app.use('/auth', limiter);
 
-const PORT = process.env.PORT || 3000;
+// Auto-purge expired sessions
+setInterval(async () => {
+  console.log("🧹 Janitor scanning...");
 
-// Init DB then Start Server
+  try {
+    const expired = await sql`
+      SELECT code FROM sessions
+      WHERE expires_at < NOW()
+      AND is_active = TRUE
+    `;
+
+    for (const session of expired) {
+      await sql`
+        DELETE FROM location_history
+        WHERE session_code = ${session.code}
+      `;
+
+      await sql`
+        DELETE FROM participants
+        WHERE session_code = ${session.code}
+      `;
+
+      await sql`
+        UPDATE sessions
+        SET is_active = FALSE
+        WHERE code = ${session.code}
+      `;
+
+      console.log(`🗑️ Purged ${session.code}`);
+    }
+  } catch (err) {
+    console.error("Janitor Error:", err.message);
+  }
+}, 60 * 60 * 1000);
+
 initDb().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 Trace Server running on port ${PORT}`);

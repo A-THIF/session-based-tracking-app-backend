@@ -4,7 +4,8 @@ import {
   joinSession, 
   getSessionDetails, 
   handleAblyWebhook, 
-  logAuditError // New
+  logAuditError, // New
+  endSession
 } from '../controllers/sessionController.js';
 import { getRoutePath } from '../controllers/routingController.js';
 
@@ -18,5 +19,7 @@ router.get('/route/path', getRoutePath);
 
 // 🔴 New Route for Remote Logging
 router.post('/audit/log', logAuditError);
+router.post('/end', endSession);
+
 
 export default router;

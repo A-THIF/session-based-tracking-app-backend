@@ -58,6 +58,32 @@ export const joinSession = async (req, res, next) => {
   }
 };
 
+// Add this to your sessionController.js
+
+export const endSession = async (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: "Session code required" });
+
+  try {
+    const sessionCode = code.toUpperCase();
+    console.log(`🔒 Privacy Purge: Ending session ${sessionCode}`);
+
+    // 1. Delete all location breadcrumbs
+    await sql`DELETE FROM location_history WHERE session_code = ${sessionCode}`;
+    
+    // 2. Delete participant links
+    await sql`DELETE FROM participants WHERE session_code = ${sessionCode}`;
+    
+    // 3. Mark session as inactive
+    await sql`UPDATE sessions SET is_active = FALSE WHERE code = ${sessionCode}`;
+
+    res.status(200).json({ success: true, message: "All session data purged." });
+  } catch (err) {
+    console.error("❌ Purge Error:", err.message);
+    res.status(500).json({ error: "Internal Server Error during purge" });
+  }
+};
+
 
 // src/controllers/sessionController.js
 
