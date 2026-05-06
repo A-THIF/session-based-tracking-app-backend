@@ -41,15 +41,14 @@ export const initDb = async () => {
 
     // 3. Create Location History Table
     // 4. Create Users Table for Manual Email Auth
+// 5. Create OTP Verifications Table
 await sql`
-  CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    display_name VARCHAR(100),
-    profile_type VARCHAR(50) DEFAULT 'genz_1',
-    is_dark_theme BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+  CREATE TABLE IF NOT EXISTS otp_verifications (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    otp_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
   );
 `;
 

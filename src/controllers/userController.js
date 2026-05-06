@@ -38,3 +38,32 @@ export const login = async (req, res) => {
     res.status(500).json({ error: "Login failed" });
   }
 };
+export const getProfile = async (req, res) => {
+  try {
+    const user = await sql`
+      SELECT id, email, display_name, profile_type, is_dark_theme 
+      FROM users WHERE id = ${req.user.userId}
+    `;
+    if (user.length === 0) return res.status(404).json({ error: "User not found" });
+    res.json({ success: true, user: user[0] });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
+};
+
+export const updateProfile = async (req, res) => {
+  const { displayName, profileType, isDarkTheme } = req.body;
+  try {
+    const result = await sql`
+      UPDATE users 
+      SET display_name = COALESCE(${displayName}, display_name),
+          profile_type = COALESCE(${profileType}, profile_type),
+          is_dark_theme = COALESCE(${isDarkTheme}, is_dark_theme)
+      WHERE id = ${req.user.userId}
+      RETURNING display_name, profile_type, is_dark_theme
+    `;
+    res.json({ success: true, user: result[0] });
+  } catch (err) {
+    res.status(500).json({ error: "Update failed" });
+  }
+};

@@ -5,10 +5,12 @@ import { initDb, sql } from './src/db/db.js';
 import userRoutes from './src/routes/userRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import sessionRoutes from './src/routes/sessionRoutes.js';
+import otpRoutes from './src/routes/otpRoutes.js'; // 🟢 Add this import
 
 app.use('/user', userRoutes);
 app.use('/auth', authRoutes);
 app.use('/session', sessionRoutes);
+app.use('/otp', otpRoutes); // 🟢 Register the OTP routes
 
 const PORT = process.env.PORT || 3000;
 

@@ -2,11 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import sessionRoutes from './routes/sessionRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import helmet from 'helmet';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use(helmet()); // 🛡️ Automatically sets secure headers (HSTS, CSP, etc.)
 
 // Routes
 app.use('/session', sessionRoutes);
