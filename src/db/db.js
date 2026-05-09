@@ -12,9 +12,15 @@ export const initDb = async () => {
     console.log("🔌 Connecting to database...");
 
     // Enable UUID generation
-    await sql`
-      CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-    `;
+    await sql`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`;
+
+await sql`
+  DROP TABLE IF EXISTS users CASCADE;
+`;
+
+await sql`
+  DROP TABLE IF EXISTS otp_verifications;
+`;
 
     // =========================
     // 1. Sessions Table
@@ -63,32 +69,19 @@ export const initDb = async () => {
     `;
 
     // =========================
-    // 4. Users Table
-    // =========================
-    await sql`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        display_name VARCHAR(100),
-        profile_type VARCHAR(50) DEFAULT 'genz_1',
-        is_dark_theme BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `;
-
-    // =========================
-    // 5. OTP Verification Table
-    // =========================
-    await sql`
-      CREATE TABLE IF NOT EXISTS otp_verifications (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) NOT NULL,
-        otp_hash TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        expires_at TIMESTAMPTZ NOT NULL
-      );
-    `;
+// 4. Users Table
+// =========================
+await sql`
+  CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(100) UNIQUE NOT NULL,
+    trace_id VARCHAR(20) UNIQUE NOT NULL,
+    profile_type VARCHAR(50) DEFAULT 'genz_1',
+    is_dark_theme BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_seen TIMESTAMPTZ DEFAULT NOW()
+  );
+`;
 
     console.log("🐘 Database ready");
   } catch (err) {
