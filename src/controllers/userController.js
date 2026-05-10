@@ -18,16 +18,19 @@ export const getUsernameSuggestions = async (req, res) => {
 export const claimIdentity = async (req, res) => {
   const { uuid, username } = req.body;
 
-  if (!uuid || !username) {
-    return res.status(400).json({ error: 'UUID and username required' });
+  // 1. Debug log to see what Flutter is actually sending
+  console.log(`Attempting claim: UUID=[${uuid}], User=[${username}]`);
+
+  if (!uuid || uuid === 'unknown' || !username) {
+    return res.status(400).json({ error: 'Valid UUID and username required' });
   }
 
   try {
-    // Generate system Trace ID: TR-###-XXX
     const traceId = `TR-${Math.floor(Math.random() * 900 + 100)}-${
       Math.random().toString(36).substring(2, 5).toUpperCase()
     }`;
 
+    // 2. Add "RETURNING *" to see the full result
     const result = await sql`
       INSERT INTO users (id, username, trace_id, last_seen)
       VALUES (${uuid}, ${username}, ${traceId}, NOW())
@@ -36,13 +39,18 @@ export const claimIdentity = async (req, res) => {
       RETURNING id, username, trace_id
     `;
 
+    console.log("✅ Identity Claimed:", result[0]);
     res.json({ success: true, user: result[0] });
   } catch (err) {
-    // Handle username collision
+    // 3. Log the ACTUAL error to Render console
+    console.error("❌ SQL ERROR in claimIdentity:", err.message);
+
     if (err.message.includes('unique constraint')) {
       return res.status(409).json({ error: 'Username taken' });
     }
-    res.status(500).json({ error: 'Identity claim failed' });
+    
+    // Send the actual error message back to Flutter temporarily to debug
+    res.status(500).json({ error: err.message }); 
   }
 };
 
