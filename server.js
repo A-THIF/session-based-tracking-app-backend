@@ -5,7 +5,6 @@ import { initDb, sql } from './src/db/db.js';
 import userRoutes from './src/routes/userRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import sessionRoutes from './src/routes/sessionRoutes.js';
-import otpRoutes from './src/routes/otpRoutes.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -23,13 +22,11 @@ app.set('trust proxy', 1);
 // 🟢 Apply Limiter to sensitive routes
 app.use('/session', limiter);
 app.use('/auth', limiter);
-app.use('/otp', limiter);
 
 // 🛣️ Route Registration
 app.use('/user', userRoutes);
 app.use('/auth', authRoutes);
 app.use('/session', sessionRoutes);
-app.use('/otp', otpRoutes);
 
 // 🧹 Optimized Batch Janitor (Matches your latest logs)
 setInterval(async () => {
