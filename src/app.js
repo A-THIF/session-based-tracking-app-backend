@@ -2,17 +2,19 @@ import express from 'express';
 import cors from 'cors';
 import sessionRoutes from './routes/sessionRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js'; // 1. Add this import
 import helmet from 'helmet';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use(helmet()); // 🛡️ Automatically sets secure headers (HSTS, CSP, etc.)
+app.use(helmet());
 
 // Routes
 app.use('/session', sessionRoutes);
 app.use('/auth', authRoutes);
+app.use('/user', userRoutes); // 2. Add this line
 
 app.get('/', (req, res) => {
   res.status(200).json({ status: "active", message: "Trace API is online 🚀" });
