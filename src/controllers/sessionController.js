@@ -139,64 +139,44 @@ export const getSessionDetails = async (req, res) => {
 
 // src/controllers/sessionController.js
 
-export const handleAblyPresenceWebhook = async (req, res) => {
-  // Ably presence webhook payloads typically group events in an 'items' array
-  const items = req.body.items || [];
+// Append this function to the very bottom of C:\Users\parve\Documents\Projects\session-based-tracking-app-backend\src\controllers\sessionController.js
 
+// Add this back into sessionController.js so your location history tracking works!
+export const handleAblyWebhook = async (req, res) => {
+  const items = req.body.messages || req.body.items || []; 
+  const headerChannel = req.headers['x-ably-channel'] || "";
+  
   try {
     for (const item of items) {
-      const channelName = item.channel; // e.g., "session_A7B3C2"
-      const action = item.action;       // 'leave', 'absent', or 'present'
-      const clientId = item.clientId;   // The user's device UUID
+      const channelName = item.channel || item.channelId || req.body.channel || headerChannel || "";
 
-      if (!channelName || !channelName.includes('session_')) continue;
+      if (!channelName || !channelName.includes('session_')) {
+         continue;
+      }
       
       const sessionCode = channelName.replace('session_', '').toUpperCase();
 
-      // We are looking for unexpected disconnects ('absent') or deliberate clean closes ('leave')
-      if (action === 'absent' || action === 'leave') {
-        console.log(`📡 Presence alert: Client ${clientId} left ${channelName} via ${action}`);
+      let messageData = item.data;
+      if (typeof messageData === 'string') {
+        try {
+          messageData = JSON.parse(messageData);
+        } catch (e) { continue; }
+      }
 
-        // 1. Query the database to see if this disconnecting device is the Host of this session
-        const sessionCheck = await sql`
-          SELECT * FROM sessions 
-          WHERE code = ${sessionCode} AND is_active = TRUE
+      if (messageData && messageData.deviceId && (messageData.lat || messageData.latitude)) {
+        const lat = messageData.lat || messageData.latitude;
+        const lng = messageData.lng || messageData.longitude;
+
+        await sql`
+          INSERT INTO location_history (session_code, device_id, latitude, longitude)
+          VALUES (${sessionCode}, ${messageData.deviceId}, ${lat}, ${lng})
         `;
-
-        if (sessionCheck.length === 0) continue;
-
-        // Assuming your sessions table tracks the host's device ID or you determine hosting status dynamically.
-        // If your schema tracks who created the session, match it against clientId:
-        const isHost = sessionCheck[0].host_id === clientId;
-
-        if (isHost) {
-          console.log(`🚨 Host Crash Detected for session ${sessionCode}! Initiating automated teardown.`);
-
-          // 2. Perform the exact cleanup we designed in endSession
-          await sql`DELETE FROM location_history WHERE session_code = ${sessionCode}`;
-          await sql`DELETE FROM participants WHERE session_code = ${sessionCode}`;
-          await sql`UPDATE sessions SET is_active = FALSE WHERE code = ${sessionCode}`;
-
-          // 3. Broadcast to the Ably Channel that the session state has changed to 'ended'
-          // This triggers the guest's mobile listener to pop them back home with "Host disconnected"
-          const channel = realtime.channels.get(channelName);
-          await channel.publish('session_state', { state: 'ended', reason: 'host_disconnected' });
-        } else {
-          // If a guest leaves, we do NOT destroy the session. We just log it.
-          console.log(`ℹ️ Guest ${clientId} disconnected. Keeping session alive for host.`);
-
-          await sql`
-            UPDATE participants 
-            SET status = 'offline', last_seen_at = NOW() 
-            WHERE session_code = ${sessionCode} AND device_id = ${clientId}
-          `;
-        
-        }
+        console.log(`✅ DB Success: Location for Session ${sessionCode} updated via webhook`);
       }
     }
     res.status(200).json({ success: true });
   } catch (err) {
-    console.error("❌ Presence Webhook Failure:", err.message);
-    res.status(200).json({ success: false, error: err.message }); 
+    console.error("❌ Location Webhook Protocol Error:", err.message);
+    res.status(200).json({ success: false, error: err.message });
   }
 };
