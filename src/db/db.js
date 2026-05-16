@@ -30,6 +30,7 @@ await sql`
         id SERIAL PRIMARY KEY,
         code VARCHAR(6) UNIQUE NOT NULL,
         host_id VARCHAR(50),
+        host_id VARCHAR(50),
         duration_minutes INTEGER DEFAULT 60,
         expires_at TIMESTAMPTZ NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW(),

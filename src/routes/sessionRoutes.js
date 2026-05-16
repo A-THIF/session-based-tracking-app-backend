@@ -8,6 +8,7 @@ import {
   endSession
 } from '../controllers/sessionController.js';
 import { getRoutePath } from '../controllers/routingController.js';
+import { handleAblyPresenceWebhook } from '../controllers/sessionController.js';
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ router.get('/route/path', getRoutePath);
 // 🔴 New Route for Remote Logging
 router.post('/audit/log', logAuditError);
 router.post('/end', endSession);
+router.post('/presence-webhook', handleAblyPresenceWebhook); // 🟢 ADD THIS LINE FOR HEARBEATS
 
 
 export default router;

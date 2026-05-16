@@ -1,29 +1,22 @@
 import crypto from 'crypto';
 import { sql } from '../db/db.js';
+import { realtime } from '../config/ably.js'; // Ensure your Ably REST client is imported
 
 // ✅ Ensure "export" is present here
 export const createSession = async (req, res) => {
   const duration = req.body?.duration || 60;
+  const { deviceId } = req.body;  // add this
   const code = crypto.randomBytes(3).toString('hex').toUpperCase();
 
   try {
-    console.log(`🚀 Attempting to create session: ${code}`);
-    const result = await sql`
-      INSERT INTO sessions (code, duration_minutes, expires_at) 
-      VALUES (${code}, ${duration}, NOW() + (${duration} * INTERVAL '1 minute')) 
-      RETURNING code, expires_at
-    `;
-
-    console.log("✅ DB Success:", result[0]);
-
-    res.status(201).json({ 
-      sessionCode: result[0].code,
-      expiresAt: result[0].expires_at 
-    });
-
+     const result = await sql`
+    INSERT INTO sessions (code, duration_minutes, expires_at, host_id)
+    VALUES (${code}, ${duration}, NOW() + (${duration} * INTERVAL '1 minute'), ${deviceId ?? null})
+    RETURNING code, expires_at
+  `;
+    res.status(201).json({ sessionCode: result[0].code, expiresAt: result[0].expires_at });
   } catch (err) {
-    console.error("❌ DB FATAL ERROR:", err.message); // This will tell us if it's a login/password issue
-    res.status(500).json({ error: "Internal Server Error", details: err.message });
+    res.status(500).json({ error: 'Internal Server Error', details: err.message });
   }
 };
 // ✅ Add this export too for the "Join" feature later
@@ -77,7 +70,11 @@ export const endSession = async (req, res) => {
     // 3. Mark session as inactive
     await sql`UPDATE sessions SET is_active = FALSE WHERE code = ${sessionCode}`;
 
-    res.status(200).json({ success: true, message: "All session data purged." });
+    // 🟢 NEW: Broadcast termination to Ably channel so the Guest app closes instantly
+    const channel = realtime.channels.get(`session_${sessionCode}`);
+    await channel.publish('session_state', { state: 'ended', reason: 'manual_termination' });
+
+    res.status(200).json({ success: true, message: "All session data purged and clients notified." });
   } catch (err) {
     console.error("❌ Purge Error:", err.message);
     res.status(500).json({ error: "Internal Server Error during purge" });
@@ -142,43 +139,64 @@ export const getSessionDetails = async (req, res) => {
 
 // src/controllers/sessionController.js
 
-export const handleAblyWebhook = async (req, res) => {
-  const items = req.body.messages || req.body.items || []; 
-  // 🟢 FIX: Extract header safely
-  const headerChannel = req.headers['x-ably-channel'] || "";
-  
+export const handleAblyPresenceWebhook = async (req, res) => {
+  // Ably presence webhook payloads typically group events in an 'items' array
+  const items = req.body.items || [];
+
   try {
     for (const item of items) {
-      // 🟢 FIX: Correctly check for channel name in all possible Ably spots
-      const channelName = item.channel || item.channelId || req.body.channel || headerChannel || "";
+      const channelName = item.channel; // e.g., "session_A7B3C2"
+      const action = item.action;       // 'leave', 'absent', or 'present'
+      const clientId = item.clientId;   // The user's device UUID
 
-      if (!channelName || !channelName.includes('session_')) {
-         continue;
-      }
+      if (!channelName || !channelName.includes('session_')) continue;
       
       const sessionCode = channelName.replace('session_', '').toUpperCase();
 
-      let messageData = item.data;
-      if (typeof messageData === 'string') {
-        try {
-          messageData = JSON.parse(messageData);
-        } catch (e) { continue; }
-      }
+      // We are looking for unexpected disconnects ('absent') or deliberate clean closes ('leave')
+      if (action === 'absent' || action === 'leave') {
+        console.log(`📡 Presence alert: Client ${clientId} left ${channelName} via ${action}`);
 
-      if (messageData && messageData.deviceId && (messageData.lat || messageData.latitude)) {
-        const lat = messageData.lat || messageData.latitude;
-        const lng = messageData.lng || messageData.longitude;
-
-        await sql`
-          INSERT INTO location_history (session_code, device_id, latitude, longitude)
-          VALUES (${sessionCode}, ${messageData.deviceId}, ${lat}, ${lng})
+        // 1. Query the database to see if this disconnecting device is the Host of this session
+        const sessionCheck = await sql`
+          SELECT * FROM sessions 
+          WHERE code = ${sessionCode} AND is_active = TRUE
         `;
-        console.log(`✅ DB Success: Session ${sessionCode} updated`);
+
+        if (sessionCheck.length === 0) continue;
+
+        // Assuming your sessions table tracks the host's device ID or you determine hosting status dynamically.
+        // If your schema tracks who created the session, match it against clientId:
+        const isHost = sessionCheck[0].host_id === clientId;
+
+        if (isHost) {
+          console.log(`🚨 Host Crash Detected for session ${sessionCode}! Initiating automated teardown.`);
+
+          // 2. Perform the exact cleanup we designed in endSession
+          await sql`DELETE FROM location_history WHERE session_code = ${sessionCode}`;
+          await sql`DELETE FROM participants WHERE session_code = ${sessionCode}`;
+          await sql`UPDATE sessions SET is_active = FALSE WHERE code = ${sessionCode}`;
+
+          // 3. Broadcast to the Ably Channel that the session state has changed to 'ended'
+          // This triggers the guest's mobile listener to pop them back home with "Host disconnected"
+          const channel = realtime.channels.get(channelName);
+          await channel.publish('session_state', { state: 'ended', reason: 'host_disconnected' });
+        } else {
+          // If a guest leaves, we do NOT destroy the session. We just log it.
+          console.log(`ℹ️ Guest ${clientId} disconnected. Keeping session alive for host.`);
+
+          await sql`
+            UPDATE participants 
+            SET status = 'offline', last_seen_at = NOW() 
+            WHERE session_code = ${sessionCode} AND device_id = ${clientId}
+          `;
+        
+        }
       }
     }
     res.status(200).json({ success: true });
   } catch (err) {
-    console.error("❌ Webhook Protocol Error:", err.message);
-    res.status(200).json({ success: false, error: err.message });
+    console.error("❌ Presence Webhook Failure:", err.message);
+    res.status(200).json({ success: false, error: err.message }); 
   }
 };
