@@ -142,41 +142,55 @@ export const getSessionDetails = async (req, res) => {
 // Append this function to the very bottom of C:\Users\parve\Documents\Projects\session-based-tracking-app-backend\src\controllers\sessionController.js
 
 // Add this back into sessionController.js so your location history tracking works!
-export const handleAblyWebhook = async (req, res) => {
-  const items = req.body.messages || req.body.items || []; 
-  const headerChannel = req.headers['x-ably-channel'] || "";
-  
+// 🟢 Paste this back into sessionController.js to fix the missing named export!
+export const handleAblyPresenceWebhook = async (req, res) => {
+  const items = req.body.items || [];
+
   try {
     for (const item of items) {
-      const channelName = item.channel || item.channelId || req.body.channel || headerChannel || "";
+      const channelName = item.channel; 
+      const action = item.action;       
+      const clientId = item.clientId;   
 
-      if (!channelName || !channelName.includes('session_')) {
-         continue;
-      }
+      if (!channelName || !channelName.includes('session_')) continue;
       
       const sessionCode = channelName.replace('session_', '').toUpperCase();
 
-      let messageData = item.data;
-      if (typeof messageData === 'string') {
-        try {
-          messageData = JSON.parse(messageData);
-        } catch (e) { continue; }
-      }
+      if (action === 'absent' || action === 'leave') {
+        console.log(`📡 Presence alert: Client ${clientId} left ${channelName} via ${action}`);
 
-      if (messageData && messageData.deviceId && (messageData.lat || messageData.latitude)) {
-        const lat = messageData.lat || messageData.latitude;
-        const lng = messageData.lng || messageData.longitude;
-
-        await sql`
-          INSERT INTO location_history (session_code, device_id, latitude, longitude)
-          VALUES (${sessionCode}, ${messageData.deviceId}, ${lat}, ${lng})
+        const sessionCheck = await sql`
+          SELECT * FROM sessions 
+          WHERE code = ${sessionCode} AND is_active = TRUE
         `;
-        console.log(`✅ DB Success: Location for Session ${sessionCode} updated via webhook`);
+
+        if (sessionCheck.length === 0) continue;
+
+        const isHost = sessionCheck[0].host_id === clientId; 
+
+        if (isHost) {
+          console.log(`🚨 Host Crash Detected for session ${sessionCode}! Initiating automated teardown.`);
+
+          await sql`DELETE FROM location_history WHERE session_code = ${sessionCode}`;
+          await sql`DELETE FROM participants WHERE session_code = ${sessionCode}`;
+          await sql`UPDATE sessions SET is_active = FALSE WHERE code = ${sessionCode}`;
+
+          const channel = realtime.channels.get(channelName);
+          await channel.publish('session_state', { state: 'ended', reason: 'host_disconnected' });
+        } else {
+          console.log(`ℹ️ Guest ${clientId} disconnected. Keeping session alive for host.`);
+          
+          await sql`
+            UPDATE participants 
+            SET status = 'offline', last_seen_at = NOW() 
+            WHERE session_code = ${sessionCode} AND device_id = ${clientId}
+          `;
+        }
       }
     }
     res.status(200).json({ success: true });
   } catch (err) {
-    console.error("❌ Location Webhook Protocol Error:", err.message);
-    res.status(200).json({ success: false, error: err.message });
+    console.error("❌ Presence Webhook Failure:", err.message);
+    res.status(200).json({ success: false, error: err.message }); 
   }
 };
